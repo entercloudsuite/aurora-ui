@@ -1,0 +1,7 @@
+pipeline:
+
+  publish:
+      image: plugins/docker
+      repo: ecsdevops/aurora-ui
+      username: ecsdevops
+      password: ${DOCKER_PASSWORD}
