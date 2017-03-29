@@ -72,6 +72,7 @@ app.config(['$translateProvider', function ($translateProvider) {
 		'ATTACHED_TO': "Attached to",
 		'DESCRIPTION': 'Description',
 		'PRICE_MONTH': 'Eur/Month',
+		'VOLUME_SNAPSHOT_MODAL_TITLE': 'Create volume snapshot',
 		'VM_DELETE_CONFIRM': 'Are you sure you want to delete this VM? This action is undoable.',
 		'SNAPSHOT_DELETE_CONFIRM': 'Are you sure you want to delete this Snapshot? This action is undoable.',
 		'VOLUME_DELETE_CONFIRM': "Are you sure you want to delete this Volume? This action is undoable.",
@@ -140,7 +141,8 @@ app.config(['$translateProvider', function ($translateProvider) {
 		'NO_NETWORKS': 'No networks',
 		'MANAGE_WIDGETS': 'Manage Widgets',
 		'AVAILABLE_WIDGETS': 'Available Widgets',
-		'ADD': "Add"
+		'ADD': "Add",
+		'NETWORK_POOL': 'Network pool'
 	});
 	
 	$translateProvider.preferredLanguage('en');

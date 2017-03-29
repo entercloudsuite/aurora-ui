@@ -32,6 +32,7 @@ module auroraApp.Services {
 		 * GET call function wrapper
 		 */
 		get(url:string, headers: any = null):ng.IPromise< any > {
+			let deferred = this.$q.defer()
 			$("#loader").addClass('loading');
 			
 			url = this._wrapUrl(url, "GET");
@@ -43,9 +44,14 @@ module auroraApp.Services {
 			}
 			
 			var result:ng.IPromise< any > = this.$http(req)
-				.then((response:any):ng.IPromise< any > => this.handleResponse(response, null))
+				.then(
+					(response:any) => deferred.resolve(this.handleResponse(response, null)),
+					(response: any) => {
+						this.handleResponse(response, null)
+						deferred.reject(response)
+					})
 			
-			return result
+			return deferred.promise
 		}
 		
 		/**
@@ -93,13 +99,19 @@ module auroraApp.Services {
 		 * POST call function wrapper
 		 */
 		put(url, payload, config = null):ng.IPromise< any > {
+			let deferred = this.$q.defer()
 			$("#loader").addClass('loading');
 			url = this._wrapUrl(url, "PUT");
 			// PUT request will be relayed:
 			var result:ng.IPromise< any > = this.$http.put(url, payload, config)
-				.then((response:any):ng.IPromise< any > => this.handleResponse(response, null))
+				.then(
+					(response:any) => deferred.resolve(this.handleResponse(response, null)),
+					(response: any) => {
+						this.handleResponse(response, null)
+						deferred.reject(response)
+					})
 			
-			return result
+			return deferred.promise
 		}
 		
 		/**
@@ -111,21 +123,19 @@ module auroraApp.Services {
 		}
 		
 		private handleResponse(response:any, params:any):any {
-			console.log("HANDLE RESPONSE", response)
 			$("#loader").removeClass('loading');
-			if (response.error) {
-				if (response.error.code == 400) {
-					this.Notification.error(response.error.message.badRequest.message)
-				} else {
-					this.Notification.error("Unhandled error")
-				}
+			if (response.status == -1) {
+				this.Notification.error("There is a problem with the connection")
 				return false
-			} else if (response.data.error) {
-				var errorKey = Object.keys(response.data.error.message)[0]
-				this.Notification.error(response.data.error.message[errorKey].message)
-			}else {
-				response.data.requestParams = params
-				return response.data
+			} else {
+				if (response.data.error) {
+					console.log("ERROR CATCHING", response)
+					var errorKey = Object.keys(response.data.error.message)[0]
+					this.Notification.error(response.data.error.message[errorKey].message)
+				} else {
+					response.data.requestParams = params
+					return response.data
+				}
 			}
 		}
 	}

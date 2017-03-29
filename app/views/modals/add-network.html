@@ -1,0 +1,36 @@
+<div class='add-network-modal'>
+    <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">{{ 'CREATE_NETWORK' | translate }}</h3>
+    </div>
+    <div class="modal-body" id="modal-body">
+        <div class="form">
+            <h4>Network Properties</h4>
+            <div class="form-group">
+                <input type="text" ng-model="network.name" class="form-control" placeholder="Network name"/>
+            </div>
+            <div class="form-group">
+                <label>
+                    <label class="switch"><input type="checkbox" ng-model="network.adminState" class="ios-switch green tinyswitch" /><div><div></div></div></label>
+                    {{ 'ADMIN_STATE' | translate }}
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <label class="switch"><input type="checkbox" ng-model="network.isShared" class="ios-switch green tinyswitch" /><div><div></div></div></label>
+                    {{ 'SHARED' | translate }}
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <label class="switch"><input type="checkbox" ng-model="createSubnet" class="ios-switch green tinyswitch" /><div><div></div></div></label>
+                    {{ 'CREATE_SUBNET' | translate }}
+                </label>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-warning btn-cancel pull-left" type="button" ng-click="cancel()">{{ 'CANCEL' | translate }}</button>
+        <button class="btn btn-primary btn-ok pull-right" type="button" ng-click="ok()" >{{ 'SAVE' | translate }}</button>
+    </div>
+</div>

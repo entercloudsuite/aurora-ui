@@ -78,14 +78,30 @@
 }
 .editable-buttons {
   .btn {
-    line-height: 21px;
-    padding: 3px 4px 2px;
-    margin-left: 0;
     &:first-child {
-      border-radius: 0;
-    }
-    &:last-child {
-      border-radius: 0 4px 4px 0;
+      margin-right: 8px;
     }
   }
+}
+.row.no-gutters {
+  margin-right: 0;
+  margin-left: 0;
+}
+.row.no-gutters > [class^="col-"],
+.row.no-gutters > [class*=" col-"] {
+  padding-right: 0;
+  padding-left: 0;
+}
+.row > .no-gutters[class^="col-"],
+.row > .no-gutters[class*=" col-"] {
+  padding-left: 0;
+  padding-right: 0;
+}
+.row > .no-left-gutters[class^="col-"],
+.row > .no-left-gutters[class*=" col-"] {
+  padding-left: 0;
+}
+.row > .no-right-gutters[class^="col-"],
+.row > .no-right-gutters[class*=" col-"] {
+  padding-right: 0;
 }

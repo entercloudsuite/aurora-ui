@@ -37,38 +37,36 @@ module auroraApp {
             })
             apiService.project.additional_cost = 0
             
+            this.item.network_interfaces = []
             /*apiService.vmVolumes.forEach(volume => {
                 if (volume.attached_to && volume.attached_to.vm == this.item)
                     this.volumes.push(volume)
             })*/
-            
+            console.log(this.item)
         }
 
         // TODO: Put network functions in own controller
 
-        addInterface(network_obj:IVmNetwork) {
-            let network_interface: INetworkInterface
-            network_interface = {
-                network: network_obj,
-                ip_addr: network_obj.allocateIp()
-            }
-            this.item.network_interfaces.push(network_interface)
+        addInterface(network_obj:INetwork) {
+            this.apiService.serverAttachInterface(this.item, network_obj).then(response => {
+                this.notification.success("Network interface has been attached")
+            })
+            
     
-            let newLink = {from: "network_" + network_interface.network.name, to: 'vm' + '_' + this.item.id, type: "uni", connector: "metro"}
+            /*let newLink = {from: "network_" + network_interface.network.name, to: 'vm' + '_' + this.item.id, type: "uni", connector: "metro"}
             if (window['mapDetails']['links'].indexOf(newLink) == -1)
-                window['mapDetails']['links'].push(newLink)
+                window['mapDetails']['links'].push(newLink)*/
         }
 
-        removeInterface(networkInterface: INetworkInterface) {
-            networkInterface.floating_ip.assigned_to = null
-
-            let index = this.item.network_interfaces.indexOf(networkInterface)
-            this.item.network_interfaces.splice(index, 1)
-    
-            let newLink = {from: "network_" + networkInterface.network.name, to: 'vm' + '_' + this.item.id, type: "uni", connector: "metro"}
+        removeInterface(port: IPort) {
+            this.apiService.deletePortInterface(this.item, port).then(response => {
+                this.notification.success("Port interface deleted.")
+            })
+            
+            /*let newLink = {from: "network_" + networkInterface.network.name, to: 'vm' + '_' + this.item.id, type: "uni", connector: "metro"}
             index = window['mapDetails']['links'].indexOf(newLink)
             if (index > -1)
-                window['mapDetails']['links'].splice(index, 1)
+                window['mapDetails']['links'].splice(index, 1)*/
         }
 
         availableFloatingIps(floating_ip: IFloatingIp) {
@@ -91,9 +89,11 @@ module auroraApp {
         
         detachVolume(volume)
         {
-            this.apiService.detachVolume(volume, this.item.id)
-            let index = this.item.volumes.indexOf(volume)
-            this.item.volumes.splice(index, 1)
+            this.apiService.detachVolume(volume, this.item.id).then((response) => {
+                this.notification.info("Volume has been detached")
+                let index = this.item.volumes.indexOf(volume)
+                this.item.volumes.splice(index, 1)
+            })
         }
 
         createSnapshot() {

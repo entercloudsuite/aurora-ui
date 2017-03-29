@@ -13,6 +13,7 @@ module auroraApp.Services {
 		vmImagesList:string[]
 		vmNetworks:VmNetwork[] = []
 		networks: INetwork[] = []
+		ports: IPort[] = []
 		networkList:VmNetwork[] = []
 		routers: IRouter[]
 		subnets: ISubnet[] = []
@@ -47,7 +48,7 @@ module auroraApp.Services {
 		init(force = false):ng.IPromise< any >
 		{
 			let deferred = this.$q.defer()
-			if (this.initialized && !force){
+			if (this.initialized && !force) {
 				deferred.resolve(true)
 			} else {
 				this.$q.all([this.loadImages(), this.loadFlavors()]).then(response => {
@@ -56,12 +57,13 @@ module auroraApp.Services {
 						deferred.resolve(true)
 						this.loadVolumes()
 						this.loadSnapshots()
-						this.loadFloatingIps()
-						this.loadRouters()
+						this.loadNetworks().then(() => {
+							this.loadPorts().then(() => this.loadFloatingIps())
+							this.loadRouters()
+						})
 					})
 				})
 			}
-			this.loadNetworks()
 			return deferred.promise
 		}
 		
@@ -161,7 +163,7 @@ module auroraApp.Services {
 		
 		loadImages():ng.IPromise< VmImage[] >
 		{
-			let endpoint = this.images_url()
+			let endpoint = this.images_endpoint()
 			let url = this.os_url + "/glance/v2/images"
 			let deferred = this.$q.defer()
 			this.http.get(url, {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}).then(response => {
@@ -188,7 +190,7 @@ module auroraApp.Services {
 		
 		loadSnapshots():ng.IPromise< VmImage[] >
 		{
-			let endpoint = this.cinder_url()
+			let endpoint = this.cinder_endpoint()
 			let url = this.os_url + "/cinder/snapshots/detail"
 			let deferred = this.$q.defer()
 			this.http.get(url, {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}).then(response => {
@@ -216,7 +218,7 @@ module auroraApp.Services {
 		
 		loadVolumes():ng.IPromise< VmImage[] >
 		{
-			let endpoint = this.cinder_url()
+			let endpoint = this.cinder_endpoint()
 			let url = this.os_url + "/cinder/volumes/detail"
 			let deferred = this.$q.defer()
 			this.http.get(url, {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}).then(response => {
@@ -267,7 +269,6 @@ module auroraApp.Services {
 					let vm = this.getVm(attachment.server_id)
 					attachment.vm = vm
 					vm.volumes.push(newVolume)
-					console.log("PUSHED NEW VOLUME IN VM", vm, newVolume)
 				})
 			}
 			let updated = false
@@ -284,14 +285,16 @@ module auroraApp.Services {
 		}
 		
 		insertVolume(volumeData) {
-			let endpoint = this.cinder_url()
+			let endpoint = this.cinder_endpoint()
 			let url = this.os_url + "/cinder/volumes"
 			let deferred = this.$q.defer()
-			var payload = { volume: {
-				size: volumeData.size,
-				display_description: volumeData.description,
-				display_name: volumeData.name
-			}}
+			var payload = {
+				volume: {
+					size: volumeData.size,
+					display_description: volumeData.description,
+					display_name: volumeData.name
+				}
+			}
 			this.http.post(
 				url,
 				payload,
@@ -315,7 +318,7 @@ module auroraApp.Services {
 		}
 		
 		deleteVolume(volume_id) {
-			let endpoint = this.cinder_url()
+			let endpoint = this.cinder_endpoint()
 			let url = this.os_url + "/cinder/volumes/" + volume_id
 			let deferred = this.$q.defer()
 			
@@ -331,11 +334,11 @@ module auroraApp.Services {
 		}
 		
 		updateVolume(newVolumeData) {
-			let endpoint = this.cinder_url()
+			let endpoint = this.cinder_endpoint()
 			let url = this.os_url + "/cinder/volumes/" + newVolumeData.id
 			let deferred = this.$q.defer()
 			let payload = {
-				volume:{
+				volume: {
 					display_name: newVolumeData.name,
 					display_description: newVolumeData.description,
 				}
@@ -425,7 +428,18 @@ module auroraApp.Services {
 				
 				deferred.resolve(response)
 			});
+			
+			return deferred.promise
+		}
 		
+		loadServerDetails(vm_id:string):ng.IPromise< VmItem >
+		{
+			let deferred = this.$q.defer()
+			let vm = this.getVm(vm_id)
+			/*this.$q.all([this.loadServerPortInterfaces(vm)]).then(response => {
+				
+			})*/
+			deferred.resolve(vm)
 			
 			return deferred.promise
 		}
@@ -439,6 +453,7 @@ module auroraApp.Services {
 			let updated = false
 			let started:Date = new Date(Date.parse(server.updated));
 			let newVm = new VmItem(
+				this,
 				server.id,
 				server.name,
 				server.status,
@@ -477,7 +492,6 @@ module auroraApp.Services {
 				url,
 				{headers: {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}}
 			).then(response => {
-				console.log("Volume delete response", response)
 				let index = this.listItems.indexOf(vm)
 				this.listItems.splice(index, 1)
 				deferred.resolve(response)
@@ -503,6 +517,80 @@ module auroraApp.Services {
 			}, response => deferred.resolve(false))
 			
 			return deferred.promise
+		}
+		
+		loadServerPortInterfaces(vm: VmItem):ng.IPromise< any >
+		{
+			let endpoint = this.compute_endpoint()
+			let url:string = this.os_url + "/nova/servers/" + vm.id + "/os-interface"
+			let deferred = this.$q.defer()
+			
+			this.http.get(
+				url,
+				{"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}
+			).then(response => {
+				let network_interfaces = []
+				if (response.interfaceAttachments.length) {
+					response.interfaceAttachments.forEach(netInterface => {
+						netInterface.network = this.getNetwork(netInterface.net_id)
+						// TODO: Check if this is ok, picking up first fixed ip
+						netInterface.fixed_ips[0].subnet = this.getSubnet(netInterface.fixed_ips[0].subnet_id)
+						network_interfaces.push(netInterface)
+					})
+					vm.ports = network_interfaces
+					
+					deferred.resolve(vm)
+				} else {
+					deferred.resolve()
+				}
+			}, response => deferred.resolve(false))
+			
+			return deferred.promise
+		}
+		
+		deletePortInterface(vm:VmItem, port:IPort) {
+			let endpoint = this.compute_endpoint()
+			let url:string = this.os_url + "/nova/servers/" + vm.id + "/os-interface/" + port.id
+			let deferred = this.$q.defer()
+			
+			this.http.delete(
+				url,
+				{headers: {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}}
+			).then(response => {
+				let index = vm.ports.indexOf(port)
+				vm.ports.splice(index, 1)
+				deferred.resolve(true)
+			})
+			return deferred.promise
+		}
+		
+		loadPorts():ng.IPromise< any > {
+			let deferred = this.$q.defer();
+			
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/ports"
+			
+			this.http.get(url, {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}).then((response):void => {
+				this.ports = []
+				response.ports.forEach((port:IPort) => {
+					this.addPort(port)
+				}, this)
+				deferred.resolve(this.ports)
+			})
+			
+			return deferred.promise
+		}
+		
+		addPort(port:IPort) {
+			if (port.device_owner.indexOf("compute") > -1) {
+				let vm = this.getVm(port.device_id)
+				if (vm) {
+					vm.ports.push(port)
+				}
+				port.device = vm
+				port.network = this.getNetwork(port.network_id)
+			}
+			this.ports.push(port)
 		}
 		
 		/**
@@ -548,6 +636,57 @@ module auroraApp.Services {
 			return deferred.promise
 		}
 		
+		serverAttachInterface(vm:VmItem, network:INetwork) {
+			let deferred = this.$q.defer()
+			let endpoint = this.compute_endpoint()
+			let url:string = this.os_url + "/nova/servers/" + vm.id + "/os-interface"
+			
+			let payload = { interfaceAttachment: { net_id: network.id } }
+			
+			this.http.post(
+				url,
+				payload,
+				{"headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}}
+			).then((response):void => {
+				let newInterface = response.interfaceAttachment
+				newInterface.network = this._filter(this.networks, newInterface.net_id)
+				
+				this.ports.push(newInterface)
+				vm.ports.push(newInterface)
+				
+				deferred.resolve(true)
+			});
+			return deferred.promise
+		}
+		
+		
+		addSubnet(network, subnetData) {
+			let deferred = this.$q.defer();
+			
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/subnets"
+			
+			this.http.post(
+				url,
+				{ subnet: subnetData },
+				{ "headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id }}
+			).then((response):void => {
+				if (!network.subnets.length) {
+					network.subnets = []
+				}
+				if (!network.subnetCollection) {
+					network.subnetCollection = []
+				}
+				network.subnets.push(response.subnet.id)
+				network.subnetCollection.push(response.subnet)
+				this.subnets.push(response.subnet)
+				
+				deferred.resolve(response.subnet)
+			});
+			
+			return deferred.promise
+		}
+		
 		loadNetworks():ng.IPromise< any > {
 			let deferred = this.$q.defer();
 			
@@ -569,7 +708,6 @@ module auroraApp.Services {
 								}
 							})
 						})
-						console.log("NETWORKS", this.networks)
 					})
 					deferred.resolve(response.networks)
 				}
@@ -578,6 +716,9 @@ module auroraApp.Services {
 			return deferred.promise
 		}
 		
+		reloadNetwork(network_id) {
+			
+		}
 		getNetwork(network_id: string)
 		{
 			let network: INetwork = null
@@ -586,6 +727,111 @@ module auroraApp.Services {
 					network = item
 			})
 			return network
+		}
+		
+		createNetwork(data) {
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/networks"
+			let deferred = this.$q.defer()
+			
+			let payload = { network: {
+				name: data.name,
+				admin_state_up: data.adminState,
+				shared: data.isShared
+			}}
+			
+			this.http.post(
+				url,
+				payload,
+				{ "headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id }}
+			).then((response):void => {
+				this.addNetwork(response.network)
+				deferred.resolve(response.network)
+			});
+			
+			return deferred.promise
+		}
+		
+		/**
+		 * Adds or updates floating ip
+		 * @param fipData Floating ip JSON raw data
+		 */
+		addNetwork(networkData:INetwork) {
+			let exists = false
+			
+			if (!networkData.subnetCollection) {
+				networkData.subnetCollection = []
+			}
+			
+			networkData.subnets.forEach(subnet_id => {
+				console.log(subnet_id)
+				networkData.subnetCollection.push(this.getSubnet(subnet_id))
+				console.log(this.getSubnet(subnet_id))
+			})
+			
+			console.log(networkData)
+			// search if network exists in collection
+			this.networks.forEach((network, index) => {
+				if (networkData.id == network.id) {
+					this.networks[index] = networkData
+					exists = true
+				}
+			})
+			console.log(exists, this.networks)
+			if (!exists) {
+				this.networks.push(networkData)
+			}
+		}
+		
+		/**
+		 * Updates floating ip in API
+		 * @param payload
+		 */
+		updateNetwork(network:INetwork, payload) {
+			let deferred = this.$q.defer();
+			
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/networks/" + network.id
+			
+			this.http.put(
+				url,
+				{network: payload},
+				{ "headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id }}
+			).then((response):void => {
+				if (response.network) {
+					this.addNetwork(response.network)
+				}
+				deferred.resolve(response.network)
+			});
+			
+			return deferred.promise
+		}
+		
+		deleteNetwork(network:INetwork) {
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/networks/" + network.id
+			let deferred = this.$q.defer()
+			
+			this.http.delete(
+				url,
+				{headers: {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}}
+			).then(response => {
+				this.removeNetwork(network.id)
+				deferred.resolve(response)
+			})
+			return deferred.promise
+		}
+		
+		removeNetwork(network_id) {
+			let deleteIndex = null
+			this.networks.forEach((network, index) => {
+				if (network.id == network_id) {
+					deleteIndex = index
+				}
+			})
+			if (deleteIndex != null) {
+				this.networks.splice(deleteIndex, 1)
+			}
 		}
 		
 		loadSubnets():ng.IPromise< any > {
@@ -607,6 +853,11 @@ module auroraApp.Services {
 			return deferred.promise
 		}
 		
+		/**
+		 * Returns subnet based on ID
+		 * @param subnet_id
+		 * @returns {ISubnet}
+		 */
 		getSubnet(subnet_id: string)
 		{
 			let subnet: ISubnet = null
@@ -617,6 +868,31 @@ module auroraApp.Services {
 			return subnet
 		}
 		
+		/**
+		 * Deletes subnet from API and cache
+		 * @param subnet
+		 * @returns {IPromise<T>}
+		 */
+		deleteSubnet(subnet:ISubnet) {
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/subnets/" + subnet.id
+			let deferred = this.$q.defer()
+			
+			this.http.delete(
+				url,
+				{headers: {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}}
+			).then(response => {
+				let index = this.subnets.indexOf(subnet)
+				this.subnets.splice(index, 1)
+				deferred.resolve(response)
+			})
+			return deferred.promise
+		}
+		
+		/**
+		 * Loads/refreshes the list of floating ips
+		 * @returns {IPromise<T>}
+		 */
 		loadFloatingIps():ng.IPromise< any > {
 			let deferred = this.$q.defer();
 			
@@ -625,10 +901,94 @@ module auroraApp.Services {
 			
 			this.http.get(url, {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}).then((response):void => {
 				if (response.floatingips) {
-					this.project.floating_ips = response.floatingips
+					response.floatingips.forEach(fip => this.addFloatingIp(fip))
 				}
-				console.log("FIPS", response)
 			})
+			return deferred.promise
+		}
+		
+		/**
+		 * Adds or updates floating ip
+		 * @param fipData Floating ip JSON raw data
+		 */
+		addFloatingIp(fipData) {
+			let fip = fipData
+			if (fip.port_id != null) {
+				fip.port = this._filter(this.ports, fip.port_id)
+			}
+			let exists = false
+			// search if floating ip exists in collection
+			this.project.floating_ips.forEach(floatingIp => {
+				if (floatingIp.id == fip.id) {
+					floatingIp = fip
+					exists = true
+				}
+			})
+			if (!exists) {
+				this.project.floating_ips.push(fip)
+			}
+		}
+		
+		/**
+		 * Updates floating ip in API
+		 * @param payload
+		 */
+		updateFloatingIp(fipId, payload) {
+			let deferred = this.$q.defer();
+			
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/floatingips/" + fipId
+			
+			this.http.put(
+				url,
+				payload,
+				{ "headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id }}
+			).then((response):void => {
+				if (response.floatingip) {
+					this.addFloatingIp(response.floatingip)
+				}
+				deferred.resolve(response.subnet)
+			});
+			
+			return deferred.promise
+		}
+		
+		reserveFloatingIp(network:INetwork) {
+			let deferred = this.$q.defer();
+			
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/floatingips"
+			
+			let payload = { floatingip: { floating_network_id: network.id } }
+			
+			this.http.post(
+				url,
+				payload,
+				{ "headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id }}
+			).then((response):void => {
+				if (response.floatingip) {
+					this.addFloatingIp(response.floatingip)
+				}
+				deferred.resolve(response.subnet)
+			});
+			
+			return deferred.promise
+		}
+		
+		deleteFloatingIp(fip:IFloatingIp) {
+			let deferred = this.$q.defer();
+			
+			let endpoint = this.network_endpoint()
+			let url:string = this.os_url + "/neutron/v2.0/floatingips/" + fip.id
+			
+			this.http.delete(
+				url,
+				{ "headers": {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id }}
+			).then((response):void => {
+				let index = this.project.floating_ips.indexOf(fip)
+				this.project.floating_ips.splice(index, 1)
+				deferred.resolve(true)
+			});
 			
 			return deferred.promise
 		}
@@ -658,43 +1018,6 @@ module auroraApp.Services {
 			
 			return deferred.promise
 		}
-		
-		processData():ng.IPromise< any > {
-			console.log("PROCESS DATA")
-			let deferred = this.$q.defer()
-			var self = this
-			
-			window['mapDetails'] = {
-				elements: {
-					internet: {x: 1, y: 6, type: 'internet'},
-					router: {x: 6, y: 6, type: 'router'}
-				},
-				links: [
-					{from: "internet", to: "router", type: "uni"}
-				]
-			}
-			// query the service for the list
-			this.queryServers().then((response:any):void => {
-				let projectData = response.project
-				
-				let zones:IZone[] = []
-				projectData.zones.forEach((zone) => {
-					zones.push({id: zone, name: zone})
-				})
-				
-				let security_groups:ISecurityGroup[] = []
-				
-				angular.forEach(projectData.security_groups, (value: any) => {
-					if (value == "default")
-						security_groups.push({name: value, rules: null, selected: true})
-					else
-						security_groups.push({name: value, rules: null, selected: false})
-				})
-				
-			});
-			return deferred.promise
-		}
-		
 		
 		getVm(vmId:string):VmItem {
 			let vm:VmItem
@@ -755,16 +1078,17 @@ module auroraApp.Services {
 			});
 			return deferred.promise
 		}
-		 
-		/**
-		 * Returns the list of servers from API
-		 */
-		queryServers(useCache:boolean = true):ng.IPromise< any > {
-			console.log('CALL: query servers')
+		
+		getKeypairs():ng.IPromise< any > {
 			let deferred = this.$q.defer()
-			deferred.resolve(true)
 			
-			return deferred.promise
+			let endpoint = this.compute_endpoint()
+			let url = this.os_url + "/nova/os-keypairs"
+			
+			this.http.get(url, {"Endpoint-ID": endpoint.id, "Tenant-ID": this.identity.tenant_id}).then(response => {
+				deferred.resolve(response.keypairs)
+			})
+			return deferred.promise;
 		}
 		
 		/**
@@ -805,7 +1129,7 @@ module auroraApp.Services {
 		 * Retrieves compute url
 		 * @returns {any}
 		 */
-		private images_url():any
+		private images_endpoint():any
 		{
 			let endpoints = this.localStorage.get('endpoints')
 			let url = endpoints.image.publicURL
@@ -823,7 +1147,7 @@ module auroraApp.Services {
 		 * Retrieves compute url
 		 * @returns {any}
 		 */
-		private cinder_url():any
+		private cinder_endpoint():any
 		{
 			let endpoints = this.localStorage.get('endpoints')
 			let url = endpoints.volume.publicURL
@@ -835,6 +1159,16 @@ module auroraApp.Services {
 				return false
 			}
 			return {url: url, id: id}
+		}
+		
+		_filter(list:any[], id) {
+			let el = null
+			list.forEach(item => {
+				if (item.id == id) {
+					el = item
+				}
+			})
+			return el
 		}
 	}
 }

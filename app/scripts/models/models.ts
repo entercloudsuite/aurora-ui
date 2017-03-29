@@ -7,14 +7,16 @@ module auroraApp {
         name: string
         prev_name: string
         host_status: string
+        compute: Services.ComputeService
         image: IVmImage
         created: Date
-        networks: IVmNetwork[]
+        networks: INetwork[]
         volumes: IVmVolume
         flavor: IVmFlavor
         zone: string
         snapshots: IVmSnapshot[]
-        network_interfaces: INetworkInterface[]
+        network_interfaces: any[]
+        ports: any[]
         started: Date
         tags: string[]
     }
@@ -23,7 +25,9 @@ module auroraApp {
         checked = false
         detail_view = false
         edit_state = false
+        ports = []
         constructor(
+            public compute,
             public id,
             public name,
             public host_status,
@@ -38,6 +42,64 @@ module auroraApp {
             public tags,
             public started = new Date()
         ) {}
+        
+        canChangeState(state: string)
+        {
+            switch (state) {
+                case "PAUSE":
+                    break;
+                case "UNPAUSE":
+                    break;
+            }
+        }
+        
+        pause(callback = null)
+        {
+            this.compute.setVmState(this, "PAUSE").then(response => {
+                this.host_status = "PAUSED"
+                if (callback) callback()
+            })
+        }
+        unpause(callback = null)
+        {
+            this.compute.setVmState(this, "UNPAUSE").then(response => {
+                this.host_status = "ACTIVE"
+                if (callback) callback()
+            })
+        }
+        resume(callback = null)
+        {
+            this.compute.setVmState(this, "RESUME").then(response => {
+                this.host_status = "ACTIVE"
+                if (callback) callback()
+            })
+        }
+        reboot(callback = null)
+        {
+            this.compute.setVmState(this, "REBOOT").then(response => {
+                this.host_status = "STARTING"
+                if (callback) callback()
+            })
+        }
+        halt(callback = null)
+        {
+            this.compute.setVmState(this, "SHUTOFF").then(response => {
+                this.host_status = "SHUTOFF"
+                if (callback) callback()
+            })
+        }
+        start(callback = null)
+        {
+            this.compute.setVmState(this, "START").then(response => {
+                this.host_status = "STARTING"
+                if (callback) callback()
+            })
+        }
+        addPort(port)
+        {
+            console.log('adding port', port)
+            this.ports.push(port)
+        }
     }
 
     export interface IFloatingIp {
@@ -46,6 +108,7 @@ module auroraApp {
         fixed_ip_address: string
         status: string
         port_id: string
+        port: IPort
         router_id: string
         assigned_to?: INetworkInterface
         assigned_vm?: VmItem
@@ -259,6 +322,30 @@ module auroraApp {
         tenant_id: string
         updated_at: string
     }
+    
+    export interface IPort {
+        name: string
+        admins_state_up: boolean
+        allowed_address_pairs: any[]
+        created_at: Date
+        status: string
+        device_id: string
+        device_owner: string
+        device: any
+        fixed_ips: IFixedIp[]
+        id: string
+        mac_address: string
+        network_id: string
+        network: INetwork
+        security_groups: ISecurityGroup[]
+        updated_at: Date
+    }
+    
+    export interface IFixedIp {
+        ip_address: string
+        subnet_id: string
+    }
+    
     export interface IVmNetwork {
         name: string
         type: string
@@ -362,6 +449,13 @@ module auroraApp {
             public server_groups,
             public server_group_limit
         ) {}
+    }
+    
+    export interface IUser {
+        username: string
+        id: string
+        roles: any[]
+        name: string
     }
     
     

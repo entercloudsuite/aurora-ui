@@ -1,7 +1,7 @@
 <div class="main-list">
     <div class='list-header'>
         <h1>{{ 'NETWORKS' | translate }}</h1>
-        <a class="btn btn-primary btn-add">
+        <a class="btn btn-primary btn-add" ng-click="netView.addNetworkAction()">
             {{ 'ADD_NETWORK' | translate }}
         </a>
     </div>
@@ -21,26 +21,35 @@
                     {{item.name}}
                 </div>
             </div>
-            <div class='cell'>
-                <div ng-repeat="subnet in item.subnetCollection">
-                    <span>{{subnet.name}}</span> {{subnet.cidr}}
+            <div class='cell centered'>
+                <div ng-if="item.subnetCollection.length">
+                    <div ng-repeat="subnet in item.subnetCollection">
+                        <span>{{subnet.name}}</span> {{subnet.cidr}}
+                    </div>
+                </div>
+                <div ng-if="!item.subnetCollection.length">
+                    N/A
                 </div>
             </div>
             <div class="cell">
                 <div class="checker" ng-class="{checked: item.shared}"></div>
             </div>
             <div class='cell'>
-                <label><input type="checkbox" ng-model="item.admin_state" class="ios-switch green" checked /><div><div></div></div></label>
+                <div class="checker" ng-class="{checked: item.admin_state_up}"></div>
+                <!-- <label><input type="checkbox" ng-model="item.admin_state_up" class="ios-switch green" checked /><div><div></div></div></label> -->
             </div>
             <div class='cell'>
                 <div class="status-pill green">ACTIVE</div>
             </div>
             <div class='cell'>
                 <ul class="table-actions">
-                    <li data-toggle="confirmation" title="Release Floating IP" uib-tooltop="{{ 'RELEASE_FLOATING_IP' | translate }}"  data-placement="top" mwl-confirm message="{{ 'RELEASE_FLOATING_IP_CONFIRM' | translate }}" title="Delete" on-confirm="netView.releaseFloatingIp(item)" ng-class="{disabled: item.assigned_to == null}">
-                        <div class="icon-action icon-release"></div>
+                    <li uib-tooltop="{{ 'ADD_SUBNET' | translate }}" ng-click="netView.addSubnetAction(item)" data-placement="top">
+                        <div class="icon-action icon-newsubnet"></div>
                     </li>
-                    <li data-toggle="confirmation"  data-placement="top" mwl-confirm message="{{ 'NETWORK_DELETE_CONFIRM' | translate }}" title="Delete" on-confirm="vm.removeInterface(network_interface)">
+                    <li uib-tooltop="{{ 'EDIT' | translate }}"  ng-click="netView.editNetworkAction(item)">
+                        <div class="icon-action icon-edit"></div>
+                    </li>
+                    <li data-toggle="confirmation"  data-placement="left" mwl-confirm message="{{ 'NETWORK_DELETE_CONFIRM' | translate }}" title="Delete" on-confirm="vm.deleteNetwork(item)">
                         <div class="icon-action icon-delete"></div>
                     </li>
 
