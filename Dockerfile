@@ -14,4 +14,4 @@ RUN bower install --allow-root
 
 EXPOSE 9000
 
-CMD [ "grunt", "serve" ]
+ENTRYPOINT [ "grunt", "serve", "--force" ]
