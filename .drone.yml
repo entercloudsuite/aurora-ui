@@ -5,3 +5,6 @@ pipeline:
       repo: ecsdevops/aurora-ui
       username: ecsdevops
       password: ${DOCKER_PASSWORD}
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}

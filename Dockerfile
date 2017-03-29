@@ -1,19 +1,7 @@
-FROM node:6.9
-
-# Install system packages
-RUN apt-get update && apt-get install -y \
-    ruby-dev \
-    ruby \
-    ruby-ffi \
-    make && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install Ruby-based tools
-RUN gem update --system && gem install compass
+FROM node:6.9-alpine
 
 # Install global tools
-RUN npm install -g grunt grunt-cli
-RUN npm install -g bower
+RUN npm install -g grunt grunt-cli bower
 
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
